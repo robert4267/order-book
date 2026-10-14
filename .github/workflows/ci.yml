@@ -1,0 +1,89 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # pinned, other versions format differently
+      - run: pip install clang-format==18.1.8
+      - run: git ls-files '*.hpp' '*.cpp' | xargs clang-format --dry-run --Werror
+
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: gcc
+            os: ubuntu-latest
+            cxx: g++
+            type: Release
+            sanitize: OFF
+          - name: clang
+            os: ubuntu-latest
+            cxx: clang++
+            type: Release
+            sanitize: OFF
+          - name: gcc asan+ubsan
+            os: ubuntu-latest
+            cxx: g++
+            type: Debug
+            sanitize: ON
+          - name: macos
+            os: macos-latest
+            cxx: clang++
+            type: Release
+            sanitize: OFF
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: configure
+        env:
+          CXX: ${{ matrix.cxx }}
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=${{ matrix.type }}
+          -DLOB_SANITIZE=${{ matrix.sanitize }}
+          -DLOB_WERROR=ON
+
+      - name: build
+        run: cmake --build build --parallel
+
+      - name: test
+        run: ctest --test-dir build --output-on-failure --parallel 4
+
+      - name: bench smoke run
+        if: matrix.sanitize == 'OFF'
+        run: ./build/lob_bench 200000 42 1
+
+      # runs under the sanitizers too
+      - name: itch replay smoke run
+        run: |
+          ./build/lob_make_itch itch.bin 200000 1
+          ./build/lob_itch_replay itch.bin AAPL
+          ./build/lob_itch_replay itch.bin --all
+
+  windows:
+    name: msvc
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: configure
+        run: cmake -S . -B build
+      # multi-config generator, so the build type goes here
+      - name: build
+        run: cmake --build build --config Release --parallel
+      - name: test
+        run: ctest --test-dir build -C Release --output-on-failure --parallel 4
+      - name: bench smoke run
+        run: ./build/Release/lob_bench.exe 200000 42 1

@@ -1,0 +1,21 @@
+# build trees
+/build*/
+/out/
+/cmake-build-*/
+CMakeUserPresets.json
+
+# tooling
+.cache/
+compile_commands.json
+.vscode/
+.vs/
+*.slnx
+.idea/
+*.swp
+.DS_Store
+
+# market data and profiler output, too big for git
+*.NASDAQ_ITCH50
+*.NASDAQ_ITCH50.gz
+data/
+perf.data*
