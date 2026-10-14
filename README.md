@@ -10,9 +10,10 @@ replay tool that rebuilds books from a feed.
 Header-only, no dependencies outside the standard library (GoogleTest for the
 tests).
 
-- 2.5-5.4x the throughput of a `std::map` book on the same flow, and the gap
-  grows as the book gets deeper (see [Results](#results)).
-- p99 per-op latency of 266-476 ns, p50 of 35-108 ns, on a shared VM.
+- 3.8-6.2x the throughput of a `std::map` book on the same flow (up to
+  47M ops/s), and the gap grows as the book gets deeper (see
+  [Results](#results)).
+- p50 latency of 24-31 ns and p99 of 237-327 ns per operation.
 - Differentially fuzzed against the reference book (about 1.45M random ops
   over 290 seeds), plus unit and regression tests, run under ASan and UBSan
   in CI.
@@ -20,32 +21,32 @@ tests).
 ## Results
 
 Synthetic flow, one instrument, ops pre-generated, single thread.
-Xeon @ 2.8 GHz in a 2-vCPU KVM VM (not isolated), g++ 13 `-O3`,
-pinned with `taskset -c 1`. Throughput is the median over seeds 42-46;
-ranges are across four full runs, and the speedup is per run.
+Intel Core Ultra 9 285H laptop on mains power, Windows, MSVC 19.51
+Release build, pinned to one core with `start /affinity 2`. Throughput is
+the median over seeds 42-46, with the min-max across seeds in brackets.
 
-| book depth                        | `OrderBook` Mops/s | `std::map` Mops/s | speedup  |
-|-----------------------------------|--------------------|-------------------|----------|
-| shallow: ~140 resting, 43 levels  | 26-32              | 10.2-11.1         | 2.5-3.1x |
-| medium: ~2.2k resting, 212 levels | 31-34              | 8.3-8.7           | 3.7-4.1x |
-| deep: ~20.5k resting, 701 levels  | 26-29              | 4.9-6.0           | 4.7-5.4x |
+| book depth                        | `OrderBook` Mops/s | `std::map` Mops/s | speedup |
+|-----------------------------------|--------------------|-------------------|---------|
+| shallow: ~140 resting, 43 levels  | 44.2 (36.5-45.1)   | 11.6 (10.4-11.9)  | 3.8x    |
+| medium: ~2.2k resting, 210 levels | 46.8 (44.6-49.4)   | 9.0 (8.6-9.2)     | 5.2x    |
+| deep: ~20.6k resting, 694 levels  | 45.2 (33.5-49.0)   | 7.3 (6.4-7.6)     | 6.2x    |
 
 The gap grows with depth: the `std::map` book's tree and list nodes fall out
 of cache as the book gets bigger, while `OrderBook`'s cost per op barely
 moves.
 
-Per-operation latency of `OrderBook`, ns:
+Per-operation latency of `OrderBook`, ns (seed 42):
 
-| book depth | p50    | p99     | p99.9   |
-|------------|--------|---------|---------|
-| shallow    | 40-89  | 364-433 | 559-606 |
-| medium     | 35-90  | 266-426 | 532-589 |
-| deep       | 65-108 | 375-476 | 579-711 |
+| book depth | p50 | p99 | p99.9 |
+|------------|-----|-----|-------|
+| shallow    | 24  | 240 | 319   |
+| medium     | 27  | 237 | 484   |
+| deep       | 31  | 327 | 558   |
 
-This is a shared VM and the numbers move between runs, single-seed
-throughput by as much as 2x. The ratio to `std::map` within a run is more
-stable than the absolute figures. Run `lob_bench` on your own machine before
-quoting anything.
+This is one run on a laptop that wasn't otherwise idle, and the numbers
+move between runs and seeds; the ratio to `std::map` is more stable than the
+absolute figures. Run `lob_bench` on your own machine before quoting
+anything.
 
 How these were measured, and what they leave out:
 
@@ -71,14 +72,13 @@ How these were measured, and what they leave out:
   realized mix.
 - Not measured: parsing, networking, multiple instruments, anything
   multi-threaded.
-- p50 on this VM is bimodal across process runs (around 35 vs 85 ns on the
-  shallow flow) while throughput stays put, which is why ranges are quoted.
+- The bench checks for an invariant TSC by reading `/proc/cpuinfo`, so on
+  Windows it always prints a warning. Recent Intel and AMD CPUs, including
+  this one, have an invariant TSC.
 
 `OrderBook` allocates about 11 MB for these runs (orders 4 MB, id table
 4 MB, levels 3 MB). The id table is sized from capacity, not from how many
-orders are resting, so capacity sets its cache footprint. On this flow a 4x
-smaller table gained only about 5%; in the ITCH replay below, where live
-orders are old, it mattered far more.
+orders are resting, so capacity sets its cache footprint.
 
 The `std::map` column is the reference book (see Design), with the same
 validation as `OrderBook`, including the quantity-overflow check. It keeps a
