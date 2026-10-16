@@ -194,23 +194,6 @@ rather than silently dropped.
 - Reducing an order (ITCH E/X) takes a lookup and then a modify, two probes
   where a dedicated reduce call would take one.
 
-## Related work
-
-The [QuantCup 1 winner](https://gist.github.com/druska/d6ce3f2bac74db08ee9007cdf98106ef)
-uses the same flat price array, but the engine assigns order ids (so they
-index the order arena directly, with no hash table), cancels lazily by
-zeroing size, and finds the next price by linear scan. This book takes
-arbitrary client ids, unlinks eagerly so depth is exact, and uses the bitmap.
-
-[CppTrader](https://github.com/chronoxor/CppTrader) replays a real NASDAQ
-day (283M messages) on an i7-4790K and reports 24 ns/msg for parsing and
-102-309 ns/msg for building every symbol's book.
-
-[exchange-core](https://github.com/exchange-core/exchange-core) benchmarks
-open-loop at fixed arrival rates through a full exchange pipeline with risk
-checks, so its latencies aren't comparable to the closed-loop, book-only
-numbers here.
-
 ## Build
 
 CMake 3.21+ and a C++20 compiler. GoogleTest is fetched at configure time,
